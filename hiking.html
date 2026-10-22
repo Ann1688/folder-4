@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>新店和美山 GPX 登山軌跡與海拔高度剖面</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .custom-footprint-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5));
+      transition: all 0.1s linear;
+    }
+    /* 自訂 Leaflet 地圖彈窗風格 */
+    .leaflet-popup-content-wrapper {
+      background: #1f2937;
+      color: #f3f4f6;
+      border-radius: 0.5rem;
+      border: 1px solid #374151;
+    }
+    .leaflet-popup-tip {
+      background: #1f2937;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-full flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700/60 sticky top-0 z-50 px-4 py-3 shadow-md">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+          <i class="fa-solid fa-mountain text-lg"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight text-white">新店和美山 (碧潭山) 登山軌跡</h1>
+          <p class="text-xs text-slate-400 flex items-center gap-2">
+            <span><i class="fa-solid fa-location-dot text-emerald-400"></i> 新北市新店區</span>
+            <span>•</span>
+            <span>GPX 數據分析與動態步態模擬</span>
+          </p>
+        </div>
+      </div>
+
+      <!-- Playback Controls -->
+      <div class="flex items-center gap-2 bg-slate-900/80 p-1.5 rounded-xl border border-slate-700/80 shadow-inner">
+        <button id="btnPlay" class="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition shadow-sm" title="播放 / 暫停">
+          <i id="iconPlay" class="fa-solid fa-play"></i>
+        </button>
+        <button id="btnReset" class="flex items-center justify-center w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="重置軌跡">
+          <i class="fa-solid fa-rotate-left"></i>
+        </button>
+        
+        <div class="h-5 w-px bg-slate-700 mx-1"></div>
+
+        <span class="text-xs text-slate-400 px-1 font-medium">速度:</span>
+        <select id="speedSelect" class="bg-slate-800 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 px-2 py-1.5 focus:outline-none focus:border-emerald-500 cursor-pointer">
+          <option value="1">1x (即時)</option>
+          <option value="2" selected>2x (快進)</option>
+          <option value="5">5x (快速)</option>
+          <option value="10">10x (高速)</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 flex flex-col gap-4">
+
+    <!-- Stats Dashboard Grid -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex flex-col justify-between">
+        <span class="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+          <i class="fa-solid fa-route text-emerald-400"></i> 總距離
+        </span>
+        <div class="mt-2 flex items-baseline gap-1">
+          <span id="statDistance" class="text-xl md:text-2xl font-bold text-slate-100">0.00</span>
+          <span class="text-xs text-slate-400">km</span>
+        </div>
+      </div>
+
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex flex-col justify-between">
+        <span class="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+          <i class="fa-solid fa-arrow-trend-up text-amber-400"></i> 最高海拔
+        </span>
+        <div class="mt-2 flex items-baseline gap-1">
+          <span id="statMaxEle" class="text-xl md:text-2xl font-bold text-slate-100">0</span>
+          <span class="text-xs text-slate-400">m</span>
+        </div>
+      </div>
+
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex flex-col justify-between">
+        <span class="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+          <i class="fa-solid fa-arrow-trend-down text-cyan-400"></i> 最低海拔
+        </span>
+        <div class="mt-2 flex items-baseline gap-1">
+          <span id="statMinEle" class="text-xl md:text-2xl font-bold text-slate-100">0</span>
+          <span class="text-xs text-slate-400">m</span>
+        </div>
+      </div>
+
+      <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex flex-col justify-between">
+        <span class="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+          <i class="fa-solid fa-hill-rockslide text-indigo-400"></i> 總累積爬升
+        </span>
+        <div class="mt-2 flex items-baseline gap-1">
+          <span id="statAscent" class="text-xl md:text-2xl font-bold text-slate-100">0</span>
+          <span class="text-xs text-slate-400">m</span>
+        </div>
+      </div>
+
+      <div class="col-span-2 md:col-span-1 bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 flex flex-col justify-between">
+        <span class="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+          <i class="fa-solid fa-stopwatch text-rose-400"></i> 花費時間
+        </span>
+        <div class="mt-2 flex items-baseline gap-1">
+          <span id="statDuration" class="text-xl md:text-2xl font-bold text-slate-100">00:00:00</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Map & Elevation Split Layout -->
+    <div class="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[550px]">
+      
+      <!-- Leaflet Map Panel -->
+      <div class="lg:col-span-2 bg-slate-800/50 border border-slate-700/60 rounded-2xl overflow-hidden shadow-lg relative flex flex-col min-h-[380px]">
+        <div id="map" class="w-full h-full min-h-[380px] z-10"></div>
+        
+        <!-- Interactive Overlay Badge -->
+        <div class="absolute top-3 right-3 z-20 bg-slate-900/80 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300 flex items-center gap-2 shadow">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="liveStatus">準備就緒，點擊地圖或播放啟動足跡 👣</span>
+        </div>
+      </div>
+
+      <!-- Profile & Track Point Details Panel -->
+      <div class="flex flex-col gap-4">
+        <!-- Chart Container -->
+        <div class="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-4 flex flex-col justify-between h-full min-h-[280px]">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+              <i class="fa-solid fa-chart-area text-emerald-400"></i> 海拔高度剖面圖
+            </h3>
+            <span class="text-xs text-slate-400">距離 (km) vs 高度 (m)</span>
+          </div>
+          <div class="flex-1 relative w-full h-full min-h-[180px]">
+            <canvas id="elevationChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Live Point Detail Info Box -->
+        <div class="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-4">
+          <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">目前足跡位置資訊</h4>
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <div class="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/40">
+              <div class="text-xs text-slate-400">當前距離</div>
+              <div class="font-bold text-slate-200 mt-0.5"><span id="currDistance">0.00</span> km</div>
+            </div>
+            <div class="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/40">
+              <div class="text-xs text-slate-400">當前海拔</div>
+              <div class="font-bold text-emerald-400 mt-0.5"><span id="currEle">0</span> m</div>
+            </div>
+            <div class="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/40">
+              <div class="text-xs text-slate-400">軌跡緯度 (Lat)</div>
+              <div id="currLat" class="font-mono text-xs text-slate-300 mt-1">--</div>
+            </div>
+            <div class="bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/40">
+              <div class="text-xs text-slate-400">軌跡經度 (Lon)</div>
+              <div id="currLon" class="font-mono text-xs text-slate-300 mt-1">--</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="text-center py-3 text-xs text-slate-500 border-t border-slate-800 mt-auto">
+    新店和美山步道 GPX 可視化分析展示 • 使用 OpenStreetMap 與 Leaflet.js
+  </footer>
+
+  <!-- JavaScript Logic -->
+  <script>
+    // -------------------------------------------------------------
+    // 1. 生成與模擬 330 個點位的和美山 GPX 軌跡數據
+    // -------------------------------------------------------------
+    // 和美山登山口(碧潭吊橋頭)約 N24.9546, E121.5362，海拔約 30m
+    // 和美山山頂 三角點約 N24.9512, E121.5320，海拔約 152m
+    function generateHemeishanGPXData() {
+      const pointCount = 330;
+      const rawPoints = [];
+      
+      const startLat = 24.9548;
+      const startLon = 121.5365;
+      const peakLat = 24.9508;
+      const peakLon = 121.5315;
+      const endLat = 24.9535;
+      const endLon = 121.5380;
+
+      let currentTime = new Date(2023, 9, 15, 8, 30, 0).getTime();
+
+      for (let i = 0; i < pointCount; i++) {
+        let t = i / (pointCount - 1);
+        let lat, lon, ele;
+
+        if (t <= 0.55) {
+          // 上升段：登山口 -> 和美山山頂
+          let subT = t / 0.55;
+          // 加入微小鋸齒彎曲
+          let waveLat = Math.sin(subT * Math.PI * 4) * 0.0006;
+          let waveLon = Math.cos(subT * Math.PI * 3) * 0.0007;
+
+          lat = startLat + (peakLat - startLat) * subT + waveLat;
+          lon = startLon + (peakLon - startLon) * subT + waveLon;
+          
+          // 海拔上升曲線 (從 ~32m 上升至 ~153m)
+          let eleProgress = Math.pow(subT, 0.8);
+          ele = 32 + (153 - 32) * eleProgress + Math.sin(subT * 12) * 2.5;
+        } else {
+          // 下山段：山頂 -> 環湖步道出口
+          let subT = (t - 0.55) / 0.45;
+          let waveLat = Math.sin(subT * Math.PI * 5) * 0.0005;
+          let waveLon = Math.sin(subT * Math.PI * 2) * 0.0008;
+
+          lat = peakLat + (endLat - peakLat) * subT + waveLat;
+          lon = peakLon + (endLon - peakLon) * subT + waveLon;
+
+          // 海拔下降曲線
+          ele = 153 - (153 - 28) * Math.pow(subT, 1.2) + Math.cos(subT * 10) * 2;
+        }
+
+        // 時間間隔 8 ~ 15 秒/點
+        currentTime += Math.floor(8000 + Math.random() * 7000);
+
+        rawPoints.push({
+          lat: Number(lat.toFixed(6)),
+          lon: Number(lon.toFixed(6)),
+          ele: Number(ele.toFixed(1)),
+          time: new Date(currentTime).toISOString()
+        });
+      }
+
+      return rawPoints;
+    }
+
+    const gpxPoints = generateHemeishanGPXData();
+
+    // -------------------------------------------------------------
+    // 2. 距離與統計數據計算
+    // -------------------------------------------------------------
+    function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371; // km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    // 計算每個點位累計距離與數據統計
+    let totalDistanceKm = 0;
+    let maxElevation = -Infinity;
+    let minElevation = Infinity;
+    let totalAscent = 0;
+
+    const processedData = gpxPoints.map((pt, idx) => {
+      if (idx > 0) {
+        const prev = gpxPoints[idx - 1];
+        const dist = calculateHaversineDistance(prev.lat, prev.lon, pt.lat, pt.lon);
+        totalDistanceKm += dist;
+
+        const eleDiff = pt.ele - prev.ele;
+        if (eleDiff > 0) totalAscent += eleDiff;
+      }
+
+      if (pt.ele > maxElevation) maxElevation = pt.ele;
+      if (pt.ele < minElevation) minElevation = pt.ele;
+
+      return {
+        ...pt,
+        cumDistance: Number(totalDistanceKm.toFixed(3))
+      };
+    });
+
+    // 時間計算
+    const startTime = new Date(processedData[0].time);
+    const endTime = new Date(processedData[processedData.length - 1].time);
+    const totalDurationSec = Math.floor((endTime - startTime) / 1000);
+
+    function formatDuration(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    // 渲染統計面板數據
+    document.getElementById('statDistance').textContent = totalDistanceKm.toFixed(2);
+    document.getElementById('statMaxEle').textContent = Math.round(maxElevation);
+    document.getElementById('statMinEle').textContent = Math.round(minElevation);
+    document.getElementById('statAscent').textContent = Math.round(totalAscent);
+    document.getElementById('statDuration').textContent = formatDuration(totalDurationSec);
+
+    // -------------------------------------------------------------
+    // 3. Leaflet 地圖初始化
+    // -------------------------------------------------------------
+    const map = L.map('map', {
+      zoomControl: true,
+      attributionControl: false
+    }).setView([processedData[0].lat, processedData[0].lon], 16);
+
+    // 免費 OpenStreetMap 圖層
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(map);
+
+    // 繪製 GPX 全程軌跡底線 (灰色陰影)
+    const latLngs = processedData.map(pt => [pt.lat, pt.lon]);
+    L.polyline(latLngs, {
+      color: '#0f172a',
+      weight: 7,
+      opacity: 0.5
+    }).addTo(map);
+
+    // 繪製主軌跡線 (鮮豔翡翠綠)
+    const fullPolyline = L.polyline(latLngs, {
+      color: '#10b981',
+      weight: 4,
+      opacity: 0.9,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(map);
+
+    // 縮放到適當邊界
+    map.fitBounds(fullPolyline.getBounds(), { padding: [30, 30] });
+
+    // 起點與終點標記 Icon
+    const startIcon = L.divIcon({
+      html: `<div class="bg-emerald-500 text-white rounded-full w-7 h-7 flex items-center justify-center font-bold text-xs border-2 border-white shadow-lg"><i class="fa-solid fa-play text-[10px]"></i></div>`,
+      className: '',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    const peakIcon = L.divIcon({
+      html: `<div class="bg-amber-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-xs border-2 border-white shadow-lg"><i class="fa-solid fa-mountain"></i></div>`,
+      className: '',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+
+    // 標記登山口與山頂
+    L.marker([processedData[0].lat, processedData[0].lon], { icon: startIcon })
+      .addTo(map)
+      .bindPopup('<b>碧潭吊橋登山口</b><br>和美山步道起點');
+
+    const peakPt = processedData.reduce((max, pt) => pt.ele > max.ele ? pt : max, processedData[0]);
+    L.marker([peakPt.lat, peakPt.lon], { icon: peakIcon })
+      .addTo(map)
+      .bindPopup(`<b>和美山頂峰</b><br>海拔 ${peakPt.ele}m`);
+
+    // 動態足跡 Icon 👣
+    const footprintIcon = L.divIcon({
+      html: `<div class="custom-footprint-icon">👣</div>`,
+      className: '',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+
+    const activeMarker = L.marker([processedData[0].lat, processedData[0].lon], {
+      icon: footprintIcon,
+      zIndexOffset: 1000
+    }).addTo(map);
+
+    // 滑鼠 hover 高度圖時的地圖連動指標
+    const hoverMarkerIcon = L.divIcon({
+      html: `<div class="w-4 h-4 bg-cyan-400 border-2 border-white rounded-full shadow-lg animate-ping"></div>`,
+      className: '',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    });
+    const hoverMarker = L.marker([processedData[0].lat, processedData[0].lon], {
+      icon: hoverMarkerIcon,
+      opacity: 0
+    }).addTo(map);
+
+    // -------------------------------------------------------------
+    // 4. Chart.js 海拔剖面圖初始化
+    // -------------------------------------------------------------
+    const ctx = document.getElementById('elevationChart').getContext('2d');
+    
+    // 建立漸層背景
+    const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+    gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+    const elevationChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: processedData.map(pt => pt.cumDistance),
+        datasets: [{
+          label: '海拔高度 (m)',
+          data: processedData.map(pt => pt.ele),
+          borderColor: '#10b981',
+          borderWidth: 2,
+          fill: true,
+          backgroundColor: gradient,
+          tension: 0.25,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#38bdf8',
+          pointHoverBorderColor: '#ffffff',
+          pointHoverBorderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            titleColor: '#94a3b8',
+            bodyColor: '#38bdf8',
+            borderColor: '#334155',
+            borderWidth: 1,
+            displayColors: false,
+            callbacks: {
+              title: (items) => `距離: ${items[0].label} km`,
+              label: (item) => `海拔: ${item.formattedValue} m`
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'category',
+            grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false },
+            ticks: {
+              color: '#94a3b8',
+              maxTicksLimit: 6,
+              font: { size: 10 }
+            },
+            title: { display: false }
+          },
+          y: {
+            grid: { color: 'rgba(51, 65, 85, 0.3)', drawBorder: false },
+            ticks: {
+              color: '#94a3b8',
+              font: { size: 10 }
+            },
+            suggestedMin: 20
+          }
+        },
+        onHover: (event, activeElements) => {
+          if (activeElements && activeElements.length > 0) {
+            const idx = activeElements[0].index;
+            const pt = processedData[idx];
+            hoverMarker.setLatLng([pt.lat, pt.lon]);
+            hoverMarker.setOpacity(1);
+          } else {
+            hoverMarker.setOpacity(0);
+          }
+        }
+      }
+    });
+
+    // 自訂在 Chart.js 上繪製當前播放位置垂直線的 Plugin
+    const activeLinePlugin = {
+      id: 'activeLine',
+      afterDraw: (chart) => {
+        if (currentIndex >= 0 && currentIndex < processedData.length) {
+          const activePoint = chart.getDatasetMeta(0).data[currentIndex];
+          if (activePoint) {
+            const ctx = chart.ctx;
+            const x = activePoint.x;
+            const topY = chart.scales.y.top;
+            const bottomY = chart.scales.y.bottom;
+
+            // 繪製垂直指標線
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x, topY);
+            ctx.lineTo(x, bottomY);
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = '#f43f5e';
+            ctx.setLineDash([3, 3]);
+            ctx.stroke();
+
+            // 繪製目前點實心圓
+            ctx.beginPath();
+            ctx.arc(x, activePoint.y, 5, 0, 2 * Math.PI);
+            ctx.fillStyle = '#f43f5e';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+      }
+    };
+    Chart.register(activeLinePlugin);
+
+    // -------------------------------------------------------------
+    // 5. 動態播放控制邏輯
+    // -------------------------------------------------------------
+    let currentIndex = 0;
+    let isPlaying = false;
+    let animationTimer = null;
+    let playbackSpeed = 2; // 預設 2x
+
+    const btnPlay = document.getElementById('btnPlay');
+    const iconPlay = document.getElementById('iconPlay');
+    const btnReset = document.getElementById('btnReset');
+    const speedSelect = document.getElementById('speedSelect');
+    const liveStatus = document.getElementById('liveStatus');
+
+    // 即時面板數據更新元素
+    const currDistanceEl = document.getElementById('currDistance');
+    const currEleEl = document.getElementById('currEle');
+    const currLatEl = document.getElementById('currLat');
+    const currLonEl = document.getElementById('currLon');
+
+    function updateStep(index) {
+      if (index >= processedData.length) {
+        pauseAnimation();
+        liveStatus.textContent = "登山完成！抵達終點 👣";
+        return;
+      }
+
+      const pt = processedData[index];
+
+      // 1. 移動標記
+      activeMarker.setLatLng([pt.lat, pt.lon]);
+
+      // 2. 地圖跟隨（選用平滑移動）
+      if (isPlaying) {
+        map.panTo([pt.lat, pt.lon], { animate: true, duration: 0.1 });
+      }
+
+      // 3. 更新數據面板
+      currDistanceEl.textContent = pt.cumDistance.toFixed(2);
+      currEleEl.textContent = pt.ele.toFixed(1);
+      currLatEl.textContent = pt.lat.toFixed(5);
+      currLonEl.textContent = pt.lon.toFixed(5);
+
+      // 4. 重繪 Chart.js 剖面圖指標
+      elevationChart.draw();
+
+      currentIndex = index;
+    }
+
+    function startAnimation() {
+      if (currentIndex >= processedData.length - 1) {
+        currentIndex = 0;
+      }
+      isPlaying = true;
+      iconPlay.className = "fa-solid fa-pause";
+      liveStatus.textContent = "足跡攀升中... 👣";
+
+      const intervalMs = Math.max(20, Math.floor(120 / playbackSpeed));
+
+      animationTimer = setInterval(() => {
+        currentIndex++;
+        updateStep(currentIndex);
+      }, intervalMs);
+    }
+
+    function pauseAnimation() {
+      isPlaying = false;
+      iconPlay.className = "fa-solid fa-play";
+      if (animationTimer) clearInterval(animationTimer);
+      if (currentIndex < processedData.length - 1) {
+        liveStatus.textContent = "播放已暫停";
+      }
+    }
+
+    // 事件監聽：播放 / 暫停按鈕
+    btnPlay.addEventListener('click', () => {
+      if (isPlaying) {
+        pauseAnimation();
+      } else {
+        startAnimation();
+      }
+    });
+
+    // 事件監聽：重置
+    btnReset.addEventListener('click', () => {
+      pauseAnimation();
+      currentIndex = 0;
+      updateStep(0);
+      map.fitBounds(fullPolyline.getBounds(), { padding: [30, 30] });
+      liveStatus.textContent = "已重置至登山口起點";
+    });
+
+    // 事件監聽：倍速調整
+    speedSelect.addEventListener('change', (e) => {
+      playbackSpeed = parseFloat(e.target.value);
+      if (isPlaying) {
+        pauseAnimation();
+        startAnimation();
+      }
+    });
+
+    // 點擊地圖任意處也可快捷啟動/暫停
+    map.on('click', () => {
+      if (isPlaying) {
+        pauseAnimation();
+      } else {
+        startAnimation();
+      }
+    });
+
+    // 初始化第一個位置
+    updateStep(0);
+
+  </script>
+</body>
+</html>
